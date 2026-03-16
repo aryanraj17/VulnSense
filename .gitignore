@@ -1,0 +1,30 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Data (too large)
+data/raw/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Models (too large)
+models/*.pkl
+models/*.pt
+models/*.bin
+models/*.dll
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+
+# Environment variables
+.env
