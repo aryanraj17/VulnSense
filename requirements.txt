@@ -1,6 +1,9 @@
 # Core ML
-torch>=2.2.0
+torch>=2.6.0
+torchvision
+torchaudio
 transformers>=4.36.0
+safetensors
 scikit-learn>=1.4.0
 numpy>=1.26.0
 pandas>=2.2.0
