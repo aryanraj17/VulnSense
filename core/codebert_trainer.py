@@ -321,7 +321,7 @@ if __name__ == '__main__':
             exit(1)
 
     # train binary classifier first
-    binary_metrics = train_model(mode='binary')
+    # binary_metrics = train_model(mode='binary')         remove the commentation to train the binary classifier
 
     # then train multiclass CWE classifier
     multiclass_metrics = train_model(mode='multiclass')
