@@ -28,3 +28,9 @@ uploads/
 
 # Environment variables
 .env
+
+# Model weights (too large for GitHub)
+models/codebert/binary/
+models/codebert/multiclass/
+*.safetensors
+*.bin
