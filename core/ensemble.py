@@ -26,7 +26,7 @@ WEIGHTS = {
 }
 
 # ── Thresholds for final verdict ─────────────────────────────────────────────
-VULN_THRESHOLD = 0.80
+VULN_THRESHOLD = 0.50
 
 # ── Device ───────────────────────────────────────────────────────────────────
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -253,7 +253,15 @@ class EnsembleScanner:
             scores['ast']      * WEIGHTS['ast']
         )
 
-        is_vulnerable  = final_score > VULN_THRESHOLD
+        # YARA override — if 2+ HIGH/CRITICAL rules match, force vulnerable
+        yara_critical = [
+            m for m in yara_matches
+            if m['severity'] in ('CRITICAL', 'HIGH')
+        ]
+        yara_override = len(yara_critical) >= 2
+
+        is_vulnerable = final_score > VULN_THRESHOLD or yara_override
+
         cwe_prediction = details['codebert'].get('cwe_prediction', 'Unknown')
         if not is_vulnerable:
             cwe_prediction = 'Safe'
