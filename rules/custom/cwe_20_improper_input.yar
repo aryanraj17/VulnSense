@@ -40,3 +40,27 @@ rule CWE20_ImproperInput_FormatString
     condition:
         any of ($printf*) and any of ($input*) and not any of ($safe*)
 }
+
+rule CWE20_FormatString_Direct
+{
+    meta:
+        cwe         = "CWE-20"
+        severity    = "HIGH"
+        description = "User input used directly as format string"
+
+    strings:
+        $printf1 = "printf(" ascii
+        $printf2 = "fprintf(" ascii
+        $printf3 = "sprintf(" ascii
+        $input1  = "argv" ascii
+        $input2  = "input" ascii
+        $input3  = "user" ascii
+        $safe1   = "\"%s\"" ascii
+        $safe2   = "\"%d\"" ascii
+        $safe3   = "format" ascii
+
+    condition:
+        any of ($printf*) and
+        any of ($input*) and
+        not any of ($safe*)
+}

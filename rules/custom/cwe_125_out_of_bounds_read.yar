@@ -31,3 +31,20 @@ rule CWE125_OOBRead_PointerArithmetic
     condition:
         any of ($ptr*) and not any of ($check*)
 }
+
+rule CWE119_OffByOne_memcpy
+{
+    meta:
+        cwe         = "CWE-119"
+        severity    = "HIGH"
+        description = "Potential off-by-one in memcpy with length calculation"
+
+    strings:
+        $memcpy  = "memcpy(" ascii
+        $len1    = "len + 1" ascii
+        $len2    = "size + 1" ascii
+        $len3    = "strlen(" ascii
+
+    condition:
+        $memcpy and any of ($len*) 
+}

@@ -2,7 +2,7 @@ rule CWE190_IntegerOverflow_MallocMultiply
 {
     meta:
         cwe         = "CWE-190"
-        severity    = "MEDIUM"
+        severity    = "HIGH"
         description = "Multiplication result used directly in malloc without overflow check"
 
     strings:
@@ -19,7 +19,7 @@ rule CWE190_IntegerOverflow_Arithmetic
 {
     meta:
         cwe         = "CWE-190"
-        severity    = "MEDIUM"
+        severity    = "HIGH"
         description = "Arithmetic on untrusted input without validation"
 
     strings:
@@ -33,4 +33,20 @@ rule CWE190_IntegerOverflow_Arithmetic
 
     condition:
         any of ($input*) and any of ($arith*) and not any of ($check*)
+}
+
+rule CWE190_MallocMultiply_Direct
+{
+    meta:
+        cwe         = "CWE-190"
+        severity    = "HIGH"
+        description = "Direct multiplication used as malloc size argument"
+
+    strings:
+        $malloc  = "malloc(" ascii
+        $mult1   = " * " ascii
+        $memset  = "memset(" ascii
+
+    condition:
+        $malloc and $mult1 and $memset
 }

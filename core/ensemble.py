@@ -25,7 +25,7 @@ WEIGHTS = {
     'ast'     : 0.10,
 }
 
-# ── Thresholds for final verdict ─────────────────────────────────────────────
+# ── Threshold for final verdict ───────────────────────────────────────────────
 VULN_THRESHOLD = 0.50
 
 # ── Device ───────────────────────────────────────────────────────────────────
@@ -80,19 +80,19 @@ class CodeBERTScanner:
 
     def _calibrate_score(self, raw_prob: float) -> float:
         """
-        Calibrates raw CodeBERT probability to reduce false positives.
-        Applies a stricter curve — only very high probabilities stay high.
+        Calibrates raw CodeBERT probability.
+        Less aggressive — preserves more signal.
         """
-        if raw_prob >= 0.99:
-            return 0.95
-        elif raw_prob >= 0.90:
-            return 0.80
-        elif raw_prob >= 0.70:
-            return 0.60
-        elif raw_prob >= 0.50:
-            return 0.45
+        if raw_prob >= 0.95:
+            return 0.90
+        elif raw_prob >= 0.80:
+            return 0.75
+        elif raw_prob >= 0.60:
+            return 0.55
+        elif raw_prob >= 0.40:
+            return 0.35
         else:
-            return raw_prob * 0.5
+            return raw_prob
 
     def predict(self, code: str) -> dict:
         if not self.binary_model or not self.tokenizer:
@@ -111,8 +111,9 @@ class CodeBERTScanner:
             with torch.no_grad():
                 binary_outputs = self.binary_model(**inputs)
                 binary_probs   = torch.softmax(binary_outputs.logits, dim=1)
-                # ── calibrate score to reduce false positives ────────────────
-                vuln_prob      = self._calibrate_score(float(binary_probs[0][1].cpu()))
+                vuln_prob      = self._calibrate_score(
+                    float(binary_probs[0][1].cpu())
+                )
 
             cwe_prediction = 'Unknown'
             cwe_confidence = 0.0
@@ -253,15 +254,28 @@ class EnsembleScanner:
             scores['ast']      * WEIGHTS['ast']
         )
 
-        # YARA override — if 2+ HIGH/CRITICAL rules match, force vulnerable
-        yara_critical = [
+        # ── 6. YARA override logic ────────────────────────────────────────────
+        yara_high = [
             m for m in yara_matches
             if m['severity'] in ('CRITICAL', 'HIGH')
         ]
-        yara_override = len(yara_critical) >= 2
+        yara_medium = [
+            m for m in yara_matches
+            if m['severity'] == 'MEDIUM'
+        ]
+        yara_format_string = [
+            m for m in yara_matches
+            if 'FormatString' in m['rule']
+        ]
 
-        is_vulnerable = final_score > VULN_THRESHOLD or yara_override
+        yara_override = (
+            len(yara_high) >= 2 or                              # 2+ HIGH/CRITICAL
+            len(yara_medium) >= 3 or                            # 3+ MEDIUM
+            (len(yara_high) >= 1 and len(yara_medium) >= 1) or # 1 HIGH + 1 MEDIUM
+            len(yara_format_string) >= 1                        # any format string
+        )
 
+        is_vulnerable  = final_score > VULN_THRESHOLD or yara_override
         cwe_prediction = details['codebert'].get('cwe_prediction', 'Unknown')
         if not is_vulnerable:
             cwe_prediction = 'Safe'
@@ -300,11 +314,11 @@ class EnsembleScanner:
         if not features:
             return 0.0
 
-        score      = 0.0
+        score       = 0.0
         n_dangerous = len(features.get('dangerous_calls', []))
         score      += min(n_dangerous * 0.15, 0.60)
 
-        cyclomatic = features.get('cyclomatic', 1)
+        cyclomatic  = features.get('cyclomatic', 1)
         if cyclomatic > 10:
             score += 0.20
         elif cyclomatic > 5:

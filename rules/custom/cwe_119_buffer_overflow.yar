@@ -32,3 +32,24 @@ rule CWE119_BufferOverflow_memcpy
     condition:
         $memcpy and $malloc
 }
+
+rule CWE119_OffByOne_LenPlusOne
+{
+    meta:
+        cwe         = "CWE-119"
+        severity    = "HIGH"
+        description = "memcpy with len+1 may write beyond buffer"
+
+    strings:
+        $memcpy  = "memcpy(" ascii
+        $len1    = "len + 1" ascii
+        $len2    = "length + 1" ascii
+        $len3    = "size + 1" ascii
+        $dest    = "dest" ascii
+        $buf     = "buffer" ascii
+
+    condition:
+        $memcpy and
+        any of ($len*) and
+        any of ($dest, $buf)
+}
