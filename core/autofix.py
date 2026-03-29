@@ -51,8 +51,8 @@ class AutoFixer:
             from groq import Groq
             api_key = os.getenv('GROQ_API_KEY')
             if api_key:
-                self.client = Groq(api_key=api_key)
-                print("  AutoFixer: Groq client initialized")
+                masked = api_key[:8] + '...' if api_key else 'None'
+                print(f"  AutoFixer: Groq initialized (key: {masked})")
             else:
                 print("  AutoFixer: GROQ_API_KEY not found in .env")
                 print("  Get free key at console.groq.com")

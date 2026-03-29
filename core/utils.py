@@ -8,6 +8,11 @@ Includes language detection and file handling.
 import os
 import re
 
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit
+
+def validate_file_size(path: str):
+    if os.path.getsize(path) > MAX_FILE_SIZE:
+        raise ValueError("File too large. Maximum size is 10MB.")
 
 # ── Supported languages ───────────────────────────────────────────────────────
 SUPPORTED_LANGUAGES = {

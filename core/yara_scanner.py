@@ -9,6 +9,9 @@ import os
 import yara
 import tempfile
 from pathlib import Path
+import contextlib
+with contextlib.suppress(Exception):
+    os.unlink(tmp_path)
 
 
 SEVERITY_MAP = {

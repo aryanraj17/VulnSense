@@ -92,7 +92,7 @@ class FeedbackStore:
 
         item = {
             'id'             : len(self.feedback),
-            'code'           : code[:500],    # truncate to save space
+            'code': code[:500].encode('utf-8', errors='ignore').decode('utf-8'),    # truncate to save space
             'predicted_label': predicted_label,
             'correct_label'  : correct_label,
             'feedback_type'  : feedback_type,

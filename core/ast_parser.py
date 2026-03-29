@@ -10,6 +10,8 @@ import os
 import json
 import numpy as np
 from pathlib import Path
+import sys
+sys.setrecursionlimit(5000)
 
 # ── Load compiled grammars ───────────────────────────────────────────────────
 try:
