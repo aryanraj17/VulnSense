@@ -2,7 +2,6 @@
 project_status.py
 -----------------
 Run this to get a complete snapshot of your project status.
-Share the output with Claude to get updated on your progress.
 """
 
 import os

@@ -9,6 +9,7 @@ data/raw/
 # Python cache
 __pycache__/
 *.py[cod]
+*.pyc
 
 # Models (too large)
 models/*.pkl

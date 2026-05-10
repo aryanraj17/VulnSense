@@ -31,5 +31,71 @@
     "cwe": "CWE-119",
     "timestamp": "2026-03-22T10:56:22.758786",
     "used_for_training": false
+  },
+  {
+    "id": 3,
+    "code": "void f(char *s) { char buf[64]; strcpy(buf, s); }",
+    "predicted_label": 1,
+    "correct_label": 1,
+    "feedback_type": "confirmed",
+    "confidence": 0.95,
+    "cwe": "CWE-119",
+    "timestamp": "2026-03-30T03:38:31.849792",
+    "used_for_training": false
+  },
+  {
+    "id": 4,
+    "code": "int add(int a, int b) { return a + b; }",
+    "predicted_label": 1,
+    "correct_label": 0,
+    "feedback_type": "false_positive",
+    "confidence": 0.82,
+    "cwe": "Safe",
+    "timestamp": "2026-03-30T03:38:31.851277",
+    "used_for_training": false
+  },
+  {
+    "id": 5,
+    "code": "void f(char *s) { char buf[64]; strncpy(buf,s,63); }",
+    "predicted_label": 0,
+    "correct_label": 1,
+    "feedback_type": "false_negative",
+    "confidence": 0.45,
+    "cwe": "CWE-119",
+    "timestamp": "2026-03-30T03:38:31.851592",
+    "used_for_training": false
+  },
+  {
+    "id": 6,
+    "code": "void f(char *s) { char buf[64]; strcpy(buf, s); }",
+    "predicted_label": 1,
+    "correct_label": 1,
+    "feedback_type": "confirmed",
+    "confidence": 0.95,
+    "cwe": "CWE-119",
+    "timestamp": "2026-03-30T04:52:44.599183",
+    "used_for_training": false
+  },
+  {
+    "id": 7,
+    "code": "int add(int a, int b) { return a + b; }",
+    "predicted_label": 1,
+    "correct_label": 0,
+    "feedback_type": "false_positive",
+    "confidence": 0.82,
+    "cwe": "Safe",
+    "timestamp": "2026-03-30T04:52:44.602182",
+    "used_for_training": false
+  },
+  {
+    "id": 8,
+    "code": "void f(char *s) { char buf[64]; strncpy(buf,s,63); }",
+    "predicted_label": 0,
+    "correct_label": 1,
+    "feedback_type": "false_negative",
+    "confidence": 0.45,
+    "cwe": "CWE-119",
+    "timestamp": "2026-03-30T04:52:44.603180",
+    "used_for_training": false
   }
 ]
