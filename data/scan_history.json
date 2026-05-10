@@ -1,0 +1,13 @@
+[
+  {
+    "timestamp": "2026-05-10T06:34:17.343040",
+    "verdict": "VULNERABLE",
+    "severity": "HIGH",
+    "cvss_score": 5.0,
+    "cwe": "Unknown",
+    "language": "c",
+    "yara_matches": 3,
+    "dangerous_lines": [],
+    "final_score": 0.3506
+  }
+]
