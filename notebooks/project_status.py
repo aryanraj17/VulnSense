@@ -34,7 +34,7 @@ def file_size(path):
 
 
 print("=" * 60)
-print("  VulnSense — Project Status Report")
+print("  VulnSense — Project stats Report")
 print("=" * 60)
 
 # ── Git Info ──────────────────────────────────────────────────
@@ -148,7 +148,7 @@ if os.path.exists('data/feedback.json'):
     print(f"  False negatives  : {fn}")
     print(f"  Confirmed        : {co}")
 else:
-    print("  No feedback collected yet")
+    print("  No feedback yet collected ")
 
 # ── Requirements ──────────────────────────────────────────────
 print("\n📦 KEY PACKAGES")
