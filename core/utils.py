@@ -129,7 +129,7 @@ def detect_language_from_code(code: str) -> str:
 def detect_language(code: str, filename: str = None) -> str:
     """
     Main language detection function.
-    Tries extension first then falls back to pattern matching.
+    It tries extension first then falls back to pattern matching.
 
     Args:
         code    : source code string
@@ -239,7 +239,7 @@ if __name__ == '__main__':
               f"expected={case['expected']} "
               f"file={case['filename']}")
 
-    print(f"\n  {'All tests passed!' if all_passed else 'Some tests failed'}")
+    print(f"\n  {'All tests passed!' if all_passed else 'few tests failed'}")
 
     print("\nLanguage display names:")
     for lang in ['c', 'python', 'javascript', 'java', 'unknown']:
