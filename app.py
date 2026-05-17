@@ -337,7 +337,7 @@ def scanner_page():
                         confidence=float(result.get('final_score', 0.0)),
                         cwe=severity.get('cwe', 'Unknown')
                     )
-                    st.success('Feedback submitted successfully.')
+                    st.success('Successfully submitted Feedback.')
                     st.rerun()
 
         report_text = build_report(
