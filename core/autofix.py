@@ -50,14 +50,18 @@ class AutoFixer:
         try:
             from groq import Groq
             api_key = os.getenv('GROQ_API_KEY')
+
             if api_key:
-                masked = api_key[:8] + '...' if api_key else 'None'
+                self.client = Groq(api_key=api_key)   # <-- critical fix
+                masked = api_key[:8] + '...'
                 print(f"  AutoFixer: Groq initialized (key: {masked})")
             else:
+                self.client = None
                 print("  AutoFixer: GROQ_API_KEY not found in .env")
                 print("  Get free key at console.groq.com")
                 print("  Using rule-based fallback fixes for now")
         except ImportError:
+            self.client = None
             print("  AutoFixer: groq not installed. Run: pip install groq")
 
     def _build_prompt(
