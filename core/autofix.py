@@ -7,11 +7,19 @@ Get your key at: console.groq.com
 """
 
 import os
+import re
 import sys
+import shutil
+import tempfile
+import subprocess
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("  Warning: python-dotenv not installed; using OS env vars only.")
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -27,18 +35,17 @@ CWE_DESCRIPTIONS = {
     'CWE-476': 'NULL Pointer Dereference — pointer used without NULL check',
     'CWE-416': 'Use After Free — memory accessed after being freed',
     'CWE-190': 'Integer Overflow — arithmetic result exceeds type bounds',
-    'CWE-20' : 'Improper Input Validation — user input not validated',
-    'CWE-89' : 'SQL Injection — user input in SQL query without sanitization',
-    'CWE-94' : 'Code Injection — user input passed to code execution function',
+    'CWE-20': 'Improper Input Validation — user input not validated',
+    'CWE-89': 'SQL Injection — user input in SQL query without sanitization',
+    'CWE-94': 'Code Injection — user input passed to code execution function',
     'CWE-Other': 'Security Vulnerability — general security issue detected',
 }
 
 
-# ────────────────────────────────────────────────────────────────────────────
 class AutoFixer:
     """
     Generates fix suggestions for vulnerable code using Groq + Llama 3.
-    Falls back to rule-based fixes if API key not available.
+    Falls back to rule-based fixes if API key not available or LLM output is invalid.
     """
 
     def __init__(self):
@@ -46,30 +53,33 @@ class AutoFixer:
         self._init_client()
 
     def _init_client(self):
-        """Initializes Groq client."""
+        """Initializes Groq client safely."""
         try:
             from groq import Groq
             api_key = os.getenv('GROQ_API_KEY')
 
-            if api_key:
-                self.client = Groq(api_key=api_key)   # <-- critical fix
+            if api_key and api_key.strip():
+                self.client = Groq(api_key=api_key.strip())
                 masked = api_key[:8] + '...'
                 print(f"  AutoFixer: Groq initialized (key: {masked})")
             else:
                 self.client = None
-                print("  AutoFixer: GROQ_API_KEY not found in .env")
+                print("  AutoFixer: GROQ_API_KEY not found in environment/.env")
                 print("  Get free key at console.groq.com")
                 print("  Using rule-based fallback fixes for now")
         except ImportError:
             self.client = None
             print("  AutoFixer: groq not installed. Run: pip install groq")
+        except Exception as e:
+            self.client = None
+            print(f"  AutoFixer: client init error: {e}")
 
     def _build_prompt(
         self,
-        code           : str,
-        cwe            : str,
+        code: str,
+        cwe: str,
         dangerous_lines: list,
-        yara_matches   : list
+        yara_matches: list
     ) -> str:
         """
         Builds a detailed prompt for Llama 3.
@@ -101,7 +111,6 @@ INSTRUCTIONS:
 
 FIXED CODE:
 ```c"""
-
         return prompt
 
     def _call_llm(self, prompt: str) -> str:
@@ -110,39 +119,130 @@ FIXED CODE:
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1024,
-            temperature=0.1    # low temp = more deterministic fixes
+            temperature=0.1
         )
-        return response.choices[0].message.content
+        return response.choices[0].message.content or ""
 
-    def _clean_response(self, response: str) -> str:
+    def _extract_code_block(self, response: str) -> str:
         """
-        Cleans LLM response.
-        Removes markdown code blocks and extracts just the code.
+        Extract code from fenced blocks first; fallback to whole text.
+        Handles ```c, ```cpp, and generic ``` blocks.
         """
-        if '```c' in response:
-            parts = response.split('```c')
-            if len(parts) > 1:
-                return parts[1].split('```')[0].strip()
+        if not response:
+            return ""
 
-        if '```' in response:
-            parts = response.split('```')
-            if len(parts) >= 2:
-                return parts[1].strip()
+        patterns = [
+            r"```c\s*(.*?)```",
+            r"```cpp\s*(.*?)```",
+            r"```C\s*(.*?)```",
+            r"```.*?\n(.*?)```",
+        ]
+        for pat in patterns:
+            m = re.search(pat, response, flags=re.DOTALL)
+            if m:
+                return m.group(1).strip()
 
         return response.strip()
 
+    def _clean_response(self, response: str) -> str:
+        """Extracts and normalizes code from LLM response."""
+        return self._extract_code_block(response).strip()
+
+    def _balanced_braces(self, code: str) -> bool:
+        """Quick structural sanity check for C-like code."""
+        stack = []
+        pairs = {')': '(', ']': '[', '}': '{'}
+        opens = set(pairs.values())
+        closes = set(pairs.keys())
+
+        for ch in code:
+            if ch in opens:
+                stack.append(ch)
+            elif ch in closes:
+                if not stack or stack[-1] != pairs[ch]:
+                    return False
+                stack.pop()
+
+        return len(stack) == 0
+
+    def _looks_like_c_code(self, code: str) -> bool:
+        """Heuristic check that output resembles C/C++ code."""
+        if not code or len(code.strip()) < 10:
+            return False
+
+        signals = [
+            ';' in code,
+            '{' in code and '}' in code,
+            any(x in code for x in ['if (', 'for (', 'while (', 'return']),
+        ]
+        return sum(bool(x) for x in signals) >= 2
+
+    def _compile_check_c(self, code: str) -> tuple[bool, str]:
+        """
+        Optional compile check (syntax-level) if compiler exists.
+        Returns (ok, message).
+        """
+        compiler = shutil.which("gcc") or shutil.which("clang")
+        if not compiler:
+            return True, "No gcc/clang available; compile check skipped"
+
+        tmp_c = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".c", delete=False, encoding="utf-8") as f:
+                tmp_c = f.name
+                f.write(code)
+
+            proc = subprocess.run(
+                [compiler, "-fsyntax-only", tmp_c],
+                capture_output=True,
+                text=True
+            )
+            if proc.returncode == 0:
+                return True, "Compile syntax check passed"
+
+            err = (proc.stderr or proc.stdout or "").strip()
+            return False, f"Compile check failed: {err[:500]}"
+        except Exception as e:
+            return False, f"Compile check error: {e}"
+        finally:
+            if tmp_c and os.path.exists(tmp_c):
+                try:
+                    os.unlink(tmp_c)
+                except Exception:
+                    pass
+
+    def _validate_fixed_code(self, original: str, fixed: str) -> tuple[bool, str]:
+        """Consolidated validator before accepting LLM output."""
+        if not fixed or not fixed.strip():
+            return False, "Empty fixed code"
+
+        if fixed.strip() == original.strip():
+            return False, "LLM returned unchanged code"
+
+        if not self._looks_like_c_code(fixed):
+            return False, "Output does not look like valid C/C++ code"
+
+        if not self._balanced_braces(fixed):
+            return False, "Unbalanced brackets/braces/parentheses"
+
+        ok, msg = self._compile_check_c(fixed)
+        if not ok:
+            return False, msg
+
+        return True, "Validation passed"
+
     def _generate_diff(self, original: str, fixed: str) -> list:
         """
-        Generates line by line diff between original and fixed code.
+        Generates line-by-line diff between original and fixed code.
         Returns list of (status, line) tuples.
         status: '+' = added, '-' = removed, '=' = unchanged
         """
         import difflib
 
         original_lines = original.strip().splitlines()
-        fixed_lines    = fixed.strip().splitlines()
-        diff           = []
-        matcher        = difflib.SequenceMatcher(None, original_lines, fixed_lines)
+        fixed_lines = fixed.strip().splitlines()
+        diff = []
+        matcher = difflib.SequenceMatcher(None, original_lines, fixed_lines)
 
         for opcode, i1, i2, j1, j2 in matcher.get_opcodes():
             if opcode == 'equal':
@@ -176,81 +276,68 @@ FIXED CODE:
 
     def get_fix(
         self,
-        code           : str,
-        cwe            : str  = 'CWE-Other',
+        code: str,
+        cwe: str = 'CWE-Other',
         dangerous_lines: list = None,
-        yara_matches   : list = None
+        yara_matches: list = None
     ) -> dict:
         """
         Main method — gets fix suggestion for vulnerable code.
-
-        Args:
-            code            : vulnerable source code
-            cwe             : CWE category detected
-            dangerous_lines : line numbers flagged as dangerous
-            yara_matches    : YARA rule matches from scanner
-
-        Returns:
-        {
-            'original_code' : '...',
-            'fixed_code'    : '...',
-            'diff'          : [...],
-            'provider'      : 'groq' or 'fallback_rules',
-            'cwe'           : 'CWE-119',
-            'success'       : True/False
-        }
+        Hardened with validation + safe fallback.
         """
         if dangerous_lines is None:
             dangerous_lines = []
         if yara_matches is None:
             yara_matches = []
 
-        # use LLM if available
         if self.client:
             try:
-                prompt     = self._build_prompt(code, cwe, dangerous_lines, yara_matches)
-                raw        = self._call_llm(prompt)
+                prompt = self._build_prompt(code, cwe, dangerous_lines, yara_matches)
+                raw = self._call_llm(prompt)
                 fixed_code = self._clean_response(raw)
-                diff       = self._generate_diff(code, fixed_code)
 
-                return {
-                    'original_code': code,
-                    'fixed_code'   : fixed_code,
-                    'diff'         : diff,
-                    'provider'     : 'groq',
-                    'cwe'          : cwe,
-                    'success'      : True
-                }
+                valid, reason = self._validate_fixed_code(code, fixed_code)
+                if valid:
+                    diff = self._generate_diff(code, fixed_code)
+                    return {
+                        'original_code': code,
+                        'fixed_code': fixed_code,
+                        'diff': diff,
+                        'provider': 'groq',
+                        'cwe': cwe,
+                        'success': True,
+                        'validation': reason
+                    }
+
+                print(f"  AutoFixer: LLM output rejected -> {reason}")
+                print("  Falling back to rule-based fixes")
 
             except Exception as e:
                 print(f"  Groq API error: {e}")
                 print("  Falling back to rule-based fixes")
 
-        # fallback to rule-based fixes
-        return self._fallback_fix(code, cwe)
+        fallback = self._fallback_fix(code, cwe)
+        fallback['validation'] = 'Fallback mode'
+        return fallback
 
     def _fallback_fix(self, code: str, cwe: str) -> dict:
         """
         Rule-based fallback fixes when Groq API not available.
-        Handles the most common vulnerability patterns automatically.
+        Handles common vulnerability patterns automatically.
         """
-        import re
         fixed = code
 
         if cwe in ('CWE-119', 'CWE-120'):
-            # strcpy → strncpy
             fixed = re.sub(
                 r'strcpy\s*\((\w+)\s*,\s*(\w+)\s*\)',
                 r'strncpy(\1, \2, sizeof(\1)-1)',
                 fixed
             )
-            # gets → fgets
             fixed = re.sub(
                 r'gets\s*\((\w+)\s*\)',
                 r'fgets(\1, sizeof(\1), stdin)',
                 fixed
             )
-            # sprintf → snprintf
             fixed = re.sub(
                 r'sprintf\s*\((\w+)\s*,',
                 r'snprintf(\1, sizeof(\1),',
@@ -258,7 +345,6 @@ FIXED CODE:
             )
 
         elif cwe == 'CWE-476':
-            # add NULL check after malloc
             fixed = re.sub(
                 r'((\w+)\s*=\s*malloc\([^;]+;)',
                 r'\1\n    if (\2 == NULL) { return; }  /* NULL check added */',
@@ -266,7 +352,6 @@ FIXED CODE:
             )
 
         elif cwe == 'CWE-416':
-            # set pointer to NULL after free
             fixed = re.sub(
                 r'free\s*\((\w+)\s*\)\s*;',
                 r'free(\1);\n    \1 = NULL;  /* prevent use-after-free */',
@@ -274,7 +359,6 @@ FIXED CODE:
             )
 
         elif cwe == 'CWE-190':
-            # add overflow check before malloc with multiplication
             fixed = re.sub(
                 r'malloc\s*\((\w+)\s*\*\s*(\w+)\s*\)',
                 r'malloc(\1 * \2)  /* TODO: add overflow check for \1 * \2 */',
@@ -282,18 +366,18 @@ FIXED CODE:
             )
 
         diff = self._generate_diff(code, fixed)
+        changed = fixed.strip() != code.strip()
 
         return {
             'original_code': code,
-            'fixed_code'   : fixed,
-            'diff'         : diff,
-            'provider'     : 'fallback_rules',
-            'cwe'          : cwe,
-            'success'      : fixed != code
+            'fixed_code': fixed,
+            'diff': diff,
+            'provider': 'fallback_rules',
+            'cwe': cwe,
+            'success': changed
         }
 
 
-# ── Quick test ────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     print("Testing AutoFixer...")
     print("=" * 55)
@@ -314,16 +398,17 @@ void vulnerable_function(char *input, int size) {
 
     print("\nGenerating fix for CWE-119 Buffer Overflow...")
     result = fixer.get_fix(
-        code            = test_code,
-        cwe             = 'CWE-119',
-        dangerous_lines = [4, 5, 7, 9],
-        yara_matches    = [{'rule': 'CWE119_BufferOverflow_strcpy'}]
+        code=test_code,
+        cwe='CWE-119',
+        dangerous_lines=[4, 5, 7, 9],
+        yara_matches=[{'rule': 'CWE119_BufferOverflow_strcpy'}]
     )
 
-    print(f"\n  Provider : {result['provider']}")
-    print(f"  Success  : {result['success']}")
-    print(f"\n  Diff (- removed, + added):")
+    print(f"\n  Provider   : {result['provider']}")
+    print(f"  Success    : {result['success']}")
+    print(f"  Validation : {result.get('validation', 'N/A')}")
+    print("\n  Diff (- removed, + added):")
     print(fixer.format_diff(result['diff']))
 
-    print(f"\n  Fixed code:")
+    print("\n  Fixed code:")
     print(result['fixed_code'])
